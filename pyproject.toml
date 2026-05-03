@@ -1,0 +1,36 @@
+[project]
+name = "school-income"
+version = "0.1.0"
+description = "Income distribution explorer for WA public school attendance zones"
+requires-python = ">=3.11"
+dependencies = [
+    "geopandas>=0.14",
+    "shapely>=2.0",
+    "tobler>=0.11",
+    "pandas>=2.0",
+    "requests>=2.31",
+    "pyproj>=3.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "pytest-mock>=3.12",
+    "responses>=0.24",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["pipeline*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: requires real data files or network access",
+    "slow: longer-running tests (e.g. synthetic end-to-end pipeline)",
+]
