@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>School Income Explorer — Washington</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>School Income Explorer</h1>
+    <p class="tagline">Estimated household income for families <em>zoned</em> to each Washington public school.</p>
+  </header>
+
+  <section class="search">
+    <input id="search-input" type="search" placeholder="Search by school name..." autocomplete="off" aria-label="Search schools">
+    <ul id="search-results" hidden></ul>
+  </section>
+
+  <section class="placeholder" id="placeholder">
+    <p>Start typing a school name to see its zoned-family income estimate.</p>
+  </section>
+
+  <section id="result-panel" hidden>
+    <div id="low-confidence-banner" hidden></div>
+    <h2 id="school-name"></h2>
+    <p class="meta">
+      <span id="school-district"></span> &middot; <span id="school-grades"></span> &middot; <span id="school-address"></span>
+    </p>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="label">Estimated median family income</span>
+        <span class="value" id="stat-median"></span>
+      </div>
+      <div class="stat">
+        <span class="label">Share &lt; $35k</span>
+        <span class="value" id="stat-under35"></span>
+      </div>
+      <div class="stat">
+        <span class="label">Share &gt; $150k</span>
+        <span class="value" id="stat-over150"></span>
+      </div>
+      <div class="stat">
+        <span class="label">Estimated families with children</span>
+        <span class="value" id="stat-total"></span>
+      </div>
+    </div>
+
+    <div class="chart-wrap"><canvas id="histogram"></canvas></div>
+  </section>
+
+  <footer class="disclaimer">
+    <strong>What this is.</strong>
+    These figures estimate the income distribution of households with school-aged children
+    <em>zoned</em> to this school's attendance area, based on the U.S. Census Bureau's
+    American Community Survey 5-year estimates. They <strong>do not</strong> reflect the
+    families actually enrolled, and they exclude private-school and school-choice effects.
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/minisearch@6.3.0/dist/umd/index.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

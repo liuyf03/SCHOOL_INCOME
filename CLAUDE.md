@@ -40,11 +40,11 @@ python pipeline/validate.py
 
 ## Frontend development
 
-No build step. Serve `site/` directly:
+No build step. The page fetches `../data/processed/*.json` via relative paths, so the dev server must serve from the repo root (not `--directory site`):
 
 ```bash
-# Any static server works, e.g.:
-python -m http.server 8000 --directory site
+python -m http.server 8000
+# then visit http://localhost:8000/site/
 ```
 
 ## Tech stack

@@ -1,0 +1,98 @@
+{
+  "530000001001": {
+    "address": "400 23rd Ave, Seattle, WA 98122",
+    "bracket_histogram": [
+      {"count": 145, "label": "<$25k", "lower": 0, "upper": 25000},
+      {"count": 78, "label": "$25k-$35k", "lower": 25000, "upper": 35000},
+      {"count": 165, "label": "$35k-$50k", "lower": 35000, "upper": 50000},
+      {"count": 240, "label": "$50k-$75k", "lower": 50000, "upper": 75000},
+      {"count": 285, "label": "$75k-$100k", "lower": 75000, "upper": 100000},
+      {"count": 380, "label": "$100k-$150k", "lower": 100000, "upper": 150000},
+      {"count": 290, "label": "$150k-$200k", "lower": 150000, "upper": 200000},
+      {"count": 467, "label": "$200k+", "lower": 200000, "upper": null}
+    ],
+    "city": "Seattle",
+    "district": "Seattle Public Schools",
+    "grades": "9-12",
+    "low_confidence": false,
+    "low_confidence_reasons": [],
+    "median_family_income": 115000,
+    "name": "Garfield High School",
+    "nces_id": "530000001001",
+    "share_over_150k": 0.37,
+    "share_under_35k": 0.11,
+    "total_families_with_children": 2050
+  },
+  "530000002001": {
+    "address": "9100 SE 42nd St, Mercer Island, WA 98040",
+    "bracket_histogram": [
+      {"count": 30, "label": "<$25k", "lower": 0, "upper": 25000},
+      {"count": 28, "label": "$25k-$35k", "lower": 25000, "upper": 35000},
+      {"count": 45, "label": "$35k-$50k", "lower": 35000, "upper": 50000},
+      {"count": 90, "label": "$50k-$75k", "lower": 50000, "upper": 75000},
+      {"count": 110, "label": "$75k-$100k", "lower": 75000, "upper": 100000},
+      {"count": 210, "label": "$100k-$150k", "lower": 100000, "upper": 150000},
+      {"count": 280, "label": "$150k-$200k", "lower": 150000, "upper": 200000},
+      {"count": 627, "label": "$200k+", "lower": 200000, "upper": null}
+    ],
+    "city": "Mercer Island",
+    "district": "Mercer Island School District",
+    "grades": "9-12",
+    "low_confidence": false,
+    "low_confidence_reasons": [],
+    "median_family_income": 248000,
+    "name": "Mercer Island High School",
+    "nces_id": "530000002001",
+    "share_over_150k": 0.71,
+    "share_under_35k": 0.04,
+    "total_families_with_children": 1420
+  },
+  "530000003001": {
+    "address": "31700 SE 80th St, Issaquah, WA 98027",
+    "bracket_histogram": [
+      {"count": 0, "label": "<$25k", "lower": 0, "upper": 25000},
+      {"count": 0, "label": "$25k-$35k", "lower": 25000, "upper": 35000},
+      {"count": 0, "label": "$35k-$50k", "lower": 35000, "upper": 50000},
+      {"count": 0, "label": "$50k-$75k", "lower": 50000, "upper": 75000},
+      {"count": 0, "label": "$75k-$100k", "lower": 75000, "upper": 100000},
+      {"count": 0, "label": "$100k-$150k", "lower": 100000, "upper": 150000},
+      {"count": 0, "label": "$150k-$200k", "lower": 150000, "upper": 200000},
+      {"count": 0, "label": "$200k+", "lower": 200000, "upper": null}
+    ],
+    "city": "Issaquah",
+    "district": "Issaquah School District",
+    "grades": "K-5",
+    "low_confidence": true,
+    "low_confidence_reasons": ["missing_sabs"],
+    "median_family_income": null,
+    "name": "Cougar Mountain Elementary",
+    "nces_id": "530000003001",
+    "share_over_150k": null,
+    "share_under_35k": null,
+    "total_families_with_children": 0
+  },
+  "530000004001": {
+    "address": "102 Main St, Steptoe, WA 99174",
+    "bracket_histogram": [
+      {"count": 4, "label": "<$25k", "lower": 0, "upper": 25000},
+      {"count": 4, "label": "$25k-$35k", "lower": 25000, "upper": 35000},
+      {"count": 6, "label": "$35k-$50k", "lower": 35000, "upper": 50000},
+      {"count": 7, "label": "$50k-$75k", "lower": 50000, "upper": 75000},
+      {"count": 5, "label": "$75k-$100k", "lower": 75000, "upper": 100000},
+      {"count": 2, "label": "$100k-$150k", "lower": 100000, "upper": 150000},
+      {"count": 1, "label": "$150k-$200k", "lower": 150000, "upper": 200000},
+      {"count": 1, "label": "$200k+", "lower": 200000, "upper": null}
+    ],
+    "city": "Steptoe",
+    "district": "Whitman County School District 12",
+    "grades": "K-8",
+    "low_confidence": true,
+    "low_confidence_reasons": ["low_household_count"],
+    "median_family_income": 58000,
+    "name": "Steptoe Butte K-8",
+    "nces_id": "530000004001",
+    "share_over_150k": 0.07,
+    "share_under_35k": 0.27,
+    "total_families_with_children": 30
+  }
+}

@@ -1,0 +1,6 @@
+[
+  {"city": "Seattle", "district": "Seattle Public Schools", "name": "Garfield High School", "nces_id": "530000001001"},
+  {"city": "Mercer Island", "district": "Mercer Island School District", "name": "Mercer Island High School", "nces_id": "530000002001"},
+  {"city": "Issaquah", "district": "Issaquah School District", "name": "Cougar Mountain Elementary", "nces_id": "530000003001"},
+  {"city": "Steptoe", "district": "Whitman County School District 12", "name": "Steptoe Butte K-8", "nces_id": "530000004001"}
+]
