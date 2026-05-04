@@ -1,0 +1,6 @@
+NCESSCH,SCH_NAME,LEA_NAME,LSTATE,SY_STATUS_TEXT,GSLO,GSHI,LSTREET1,LCITY,LZIP
+530000001001,Garfield High School,Seattle Public Schools,WA,Open,09,12,400 23rd Ave,Seattle,98122
+530000002001,Mercer Island High School,Mercer Island School District,WA,Open,09,12,9100 SE 42nd St,Mercer Island,98040
+530000003001,Cougar Mountain Elementary,Issaquah School District,WA,Open,KG,05,31700 SE 80th St,Issaquah,98027
+060000001001,Hollywood High,Los Angeles Unified,CA,Open,09,12,1521 N Highland Ave,Los Angeles,90028
+530099999001,Closed WA School,Some District,WA,Closed,09,12,Old St,Seattle,98101
