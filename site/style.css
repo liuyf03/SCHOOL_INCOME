@@ -146,6 +146,43 @@ header h1 {
   line-height: 1.6;
 }
 
+.chart-controls {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+.toggle {
+  display: inline-flex;
+  border: 1px solid #c8ccd2;
+  border-radius: 6px;
+  overflow: hidden;
+  background: white;
+}
+
+.toggle-btn {
+  background: white;
+  border: none;
+  padding: 0.4rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #555;
+  transition: background 0.15s, color 0.15s;
+}
+
+.toggle-btn + .toggle-btn {
+  border-left: 1px solid #c8ccd2;
+}
+
+.toggle-btn.active {
+  background: #3b6fa3;
+  color: white;
+}
+
+.toggle-btn:not(.active):hover {
+  background: #f3f6fb;
+}
+
 @media (max-width: 480px) {
   .stats { grid-template-columns: 1fr; }
 }

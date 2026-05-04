@@ -23,11 +23,15 @@ const el = {
   statOver150: document.getElementById('stat-over150'),
   statTotal: document.getElementById('stat-total'),
   canvas: document.getElementById('histogram'),
+  toggleCount: document.getElementById('toggle-count'),
+  togglePercent: document.getElementById('toggle-percent'),
 };
 
 let miniSearch = null;
 let schoolsCache = null;
 let chart = null;
+let mode = 'count';
+let currentRecord = null;
 
 async function loadSearchIndex() {
   const res = await fetch(SEARCH_INDEX_URL);
@@ -109,29 +113,67 @@ async function selectSchool(ncesId) {
     el.banner.hidden = true;
   }
 
-  renderHistogram(record.bracket_histogram);
+  currentRecord = record;
+  renderHistogram(record);
 }
 
-function renderHistogram(buckets) {
+function renderHistogram(record) {
   if (chart) chart.destroy();
+  const buckets = record.bracket_histogram;
+  const total = record.total_families_with_children;
+  const isPercent = mode === 'percent';
+  const data = isPercent
+    ? buckets.map((b) => (total > 0 ? Math.round((b.count / total) * 1000) / 10 : 0))
+    : buckets.map((b) => b.count);
+  const yTitle = isPercent ? '% of families' : 'Families';
+
   chart = new Chart(el.canvas, {
     type: 'bar',
     data: {
       labels: buckets.map((b) => b.label),
       datasets: [
         {
-          label: 'Estimated families',
-          data: buckets.map((b) => b.count),
+          label: isPercent ? '% of families' : 'Estimated families',
+          data,
           backgroundColor: '#3b6fa3',
         },
       ],
     },
     options: {
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, title: { display: true, text: 'Families' } } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) =>
+              isPercent
+                ? `${ctx.parsed.y.toFixed(1)}%`
+                : `${Math.round(ctx.parsed.y).toLocaleString('en-US')} families`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: yTitle },
+          ticks: isPercent ? { callback: (v) => v + '%' } : {},
+        },
+      },
     },
   });
 }
+
+function setMode(newMode) {
+  if (mode === newMode) return;
+  mode = newMode;
+  el.toggleCount.classList.toggle('active', mode === 'count');
+  el.toggleCount.setAttribute('aria-pressed', String(mode === 'count'));
+  el.togglePercent.classList.toggle('active', mode === 'percent');
+  el.togglePercent.setAttribute('aria-pressed', String(mode === 'percent'));
+  if (currentRecord) renderHistogram(currentRecord);
+}
+
+el.toggleCount.addEventListener('click', () => setMode('count'));
+el.togglePercent.addEventListener('click', () => setMode('percent'));
 
 el.input.addEventListener('input', (event) => {
   if (!miniSearch) return;
