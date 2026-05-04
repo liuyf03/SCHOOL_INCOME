@@ -42,9 +42,9 @@ def _api_key() -> str:
     key = os.environ.get("CENSUS_API_KEY")
     if not key:
         raise RuntimeError(
-            "CENSUS_API_KEY environment variable is not set. "
-            "Request a free key at https://api.census.gov/data/key_signup.html "
-            "and put it in your .env file."
+            "CENSUS_API_KEY is not set. Copy .env.example to .env at the "
+            "repo root and add your key (or export it in your shell). "
+            "Request a free key at https://api.census.gov/data/key_signup.html"
         )
     return key
 

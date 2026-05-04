@@ -12,11 +12,17 @@ from pathlib import Path
 from typing import Any
 
 import geopandas as gpd
+from dotenv import load_dotenv
 
 REPO_ROOT: Path = Path(__file__).resolve().parent.parent
 DATA_DIR: Path = REPO_ROOT / "data"
 RAW_DIR: Path = DATA_DIR / "raw"
 PROCESSED_DIR: Path = DATA_DIR / "processed"
+
+# Load .env from the repo root if present. No-op when the file is missing,
+# and never overrides values already in the environment — so test
+# monkeypatching and explicit shell exports continue to win.
+load_dotenv(REPO_ROOT / ".env")
 
 # TODO(post-mvp): parameterize STATE_FIPS to a list to support multi-state builds.
 STATE_FIPS: str = "53"

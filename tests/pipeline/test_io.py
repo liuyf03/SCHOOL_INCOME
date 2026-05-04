@@ -1,9 +1,11 @@
 """Tests for pipeline.io paths, constants, and helpers."""
+import os
 from pathlib import Path
 
 import geopandas as gpd
 import pyproj
 import pytest
+from dotenv import load_dotenv
 from shapely.geometry import Point
 
 from pipeline import io
@@ -99,6 +101,30 @@ def test_read_geo_honors_target_crs_override(tmp_path):
     out = io.read_geo(src, target_crs="EPSG:3857")
 
     assert out.crs.to_epsg() == 3857
+
+
+def test_dotenv_values_flow_into_environ(tmp_path, monkeypatch):
+    """Sanity check on the .env loader wired up at the top of pipeline.io —
+    keys placed in .env land in os.environ when load_dotenv is invoked."""
+    env_file = tmp_path / ".env"
+    env_file.write_text("PHASE4_FAKE_KEY=loaded-from-dotenv\n", encoding="utf-8")
+    monkeypatch.delenv("PHASE4_FAKE_KEY", raising=False)
+
+    load_dotenv(env_file)
+
+    assert os.environ.get("PHASE4_FAKE_KEY") == "loaded-from-dotenv"
+
+
+def test_dotenv_does_not_override_existing_env(tmp_path, monkeypatch):
+    """Existing env vars must win over .env — tests can monkeypatch
+    safely and a shell export beats a stale .env entry."""
+    env_file = tmp_path / ".env"
+    env_file.write_text("PHASE4_FAKE_KEY=from-dotenv\n", encoding="utf-8")
+    monkeypatch.setenv("PHASE4_FAKE_KEY", "from-shell")
+
+    load_dotenv(env_file)
+
+    assert os.environ.get("PHASE4_FAKE_KEY") == "from-shell"
 
 
 def test_read_geo_raises_when_source_has_no_crs(tmp_path, monkeypatch):
