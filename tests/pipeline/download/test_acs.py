@@ -25,6 +25,23 @@ def test_build_url_overrides():
     assert "B11005" in url
 
 
+def test_build_url_url_encodes_group_parens():
+    """Census API rejects raw '(' / ')' even for valid keys (returns an
+    HTML 'Invalid Key' page). Parens must be encoded as %28 / %29."""
+    url = acs.build_url("B19131")
+    assert "%28B19131%29" in url
+    assert "(B19131)" not in url
+
+
+def test_build_url_uses_single_in_with_space_hierarchy():
+    """Block-group queries need state-county in one in= param, not two —
+    otherwise the API returns '400 unknown/unsupported geography hierarchy'."""
+    url = acs.build_url("B19131")
+    assert "in=state:53%20county:*" in url
+    assert "&in=state:" in url
+    assert url.count("&in=") == 1
+
+
 def test_parse_response_builds_geoid_and_casts_numeric(fixtures_dir):
     rows = json.loads((fixtures_dir / "acs_b19131_sample.json").read_text())
     df = acs.parse_response(rows)

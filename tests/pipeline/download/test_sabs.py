@@ -43,3 +43,34 @@ def test_fetch_skips_when_output_exists(tmp_path, monkeypatch):
     results = sabs.fetch(force=False)
 
     assert results == [("SABS", "skipped", target)]
+
+
+def test_fetch_uses_local_archive_when_present(tmp_path, monkeypatch):
+    """A manually-downloaded SABS_1516.zip at LOCAL_ARCHIVE must short-circuit
+    the network call — that's the documented escape hatch when NCES is flaky."""
+    target = tmp_path / "sabs.gpkg"
+    local_zip = tmp_path / "SABS_1516.zip"
+    local_zip.write_bytes(b"sentinel")
+    monkeypatch.setitem(sabs.RAW_FILES, "sabs", target)
+    monkeypatch.setattr(sabs, "LOCAL_ARCHIVE", local_zip)
+
+    captured = []
+    monkeypatch.setattr(sabs, "_convert_zip_to_gpkg", lambda zip_path, out: captured.append((zip_path, out)))
+
+    def fail_if_called(*a, **k):
+        raise AssertionError("network call attempted despite local archive")
+
+    monkeypatch.setattr(sabs, "_stream_to_disk", fail_if_called)
+
+    results = sabs.fetch(force=False)
+
+    assert results == [("SABS", "converted-local", target)]
+    assert captured == [(local_zip, target)]
+
+
+def test_session_has_browser_user_agent_and_retry_policy():
+    s = sabs._session()
+    assert "Mozilla" in s.headers["User-Agent"]
+    adapter = s.get_adapter("https://nces.ed.gov/")
+    assert adapter.max_retries.total == sabs.MAX_RETRIES
+    assert 503 in adapter.max_retries.status_forcelist

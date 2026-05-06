@@ -28,13 +28,20 @@ def build_url(
     vintage: int = ACS_VINTAGE,
     state: str = STATE_FIPS,
 ) -> str:
-    """URL-encoded Census API endpoint for ``table_id`` at block-group resolution."""
+    """URL-encoded Census API endpoint for ``table_id`` at block-group resolution.
+
+    Two non-obvious requirements of the Census API:
+    - The ``group(...)`` parens must be URL-encoded (``%28`` / ``%29``) or the
+      gateway returns an HTML 'Invalid Key' page even for valid keys.
+    - Block-group hierarchy must live in a single ``in=`` parameter
+      (``state:53 county:*``), not separate ``in=`` params, or the API
+      returns ``400 unknown/unsupported geography hierarchy``.
+    """
     return (
         f"{CENSUS_API_BASE}/{vintage}/acs/acs5"
-        f"?get=group({table_id})"
+        f"?get=group%28{table_id}%29"
         f"&for=block%20group:*"
-        f"&in=state:{state}"
-        f"&in=county:*"
+        f"&in=state:{state}%20county:*"
     )
 
 
