@@ -30,19 +30,41 @@ LOCAL_ARCHIVE: Path = RAW_DIR / "SABS_1516.zip"
 
 CHUNK_BYTES = 1 << 20  # 1 MB
 CONNECT_TIMEOUT = 30
-READ_TIMEOUT = 120  # any single 1 MB chunk should arrive well within 2 minutes
+READ_TIMEOUT = 300  # NCES sometimes stalls for minutes mid-stream
 MAX_RETRIES = 3
+RESUME_ATTEMPTS = 6
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 
+_NUMERIC_STATE_COLS = ("STATEFP", "STATEFP15", "STATEFP10", "STATEFIPS")
+_ALPHA_STATE_COLS = ("LSTATE", "lstate", "STUSPS", "stusps", "STATE", "state")
+_LEAID_COLS = ("leaid", "LEAID")
+
+
 def filter_to_wa(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Filter a SABS GeoDataFrame to Washington (STATEFP == STATE_FIPS)."""
-    if "STATEFP" not in gdf.columns:
-        raise ValueError("SABS GeoDataFrame missing STATEFP column")
-    return gdf[gdf["STATEFP"] == STATE_FIPS].copy()
+    """Filter a SABS GeoDataFrame to Washington.
+
+    SABS column naming has drifted across NCES releases (``STATEFP``,
+    ``STATEFP15``, ``LSTATE``, ``lstate``...). When no explicit state
+    column is present, the 2-character state FIPS prefix of ``leaid``
+    (a 7-char district NCES ID) is used as a last resort.
+    """
+    for col in _NUMERIC_STATE_COLS:
+        if col in gdf.columns:
+            return gdf[gdf[col] == STATE_FIPS].copy()
+    for col in _ALPHA_STATE_COLS:
+        if col in gdf.columns:
+            return gdf[gdf[col].astype(str).str.upper() == "WA"].copy()
+    for col in _LEAID_COLS:
+        if col in gdf.columns:
+            return gdf[gdf[col].astype(str).str.startswith(STATE_FIPS)].copy()
+    raise ValueError(
+        "SABS GeoDataFrame has no recognized state column. "
+        f"Columns present: {list(gdf.columns)}"
+    )
 
 
 def _session() -> requests.Session:
@@ -59,16 +81,67 @@ def _session() -> requests.Session:
     return s
 
 
-def _stream_to_disk(url: str, dest: Path) -> None:
+def _archive_is_valid(path: Path) -> bool:
+    """True iff ``path`` exists and is a fully-readable zip with a .shp."""
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    try:
+        with zipfile.ZipFile(path) as zf:
+            return any(n.endswith(".shp") for n in zf.namelist())
+    except (zipfile.BadZipFile, OSError):
+        return False
+
+
+def _stream_to_disk(url: str, dest: Path, resume: bool = False) -> None:
+    """Single streamed GET. If ``resume=True`` and ``dest`` has bytes,
+    requests them via ``Range``; appends if the server replies 206 or
+    truncates and writes from scratch on a 200."""
+    headers: dict[str, str] = {}
+    mode = "wb"
+    if resume and dest.exists() and dest.stat().st_size > 0:
+        headers["Range"] = f"bytes={dest.stat().st_size}-"
+        mode = "ab"
+
     with _session() as session:
         with session.get(
-            url, stream=True, timeout=(CONNECT_TIMEOUT, READ_TIMEOUT)
+            url,
+            headers=headers,
+            stream=True,
+            timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
         ) as response:
+            if response.status_code == 416:
+                return  # range past end-of-file → already complete
             response.raise_for_status()
-            with dest.open("wb") as f:
+            # Server ignored Range and sent the whole thing — restart cleanly.
+            if response.status_code == 200 and "Range" in headers:
+                mode = "wb"
+            with dest.open(mode) as f:
                 for chunk in response.iter_content(chunk_size=CHUNK_BYTES):
                     if chunk:
                         f.write(chunk)
+
+
+def _stream_with_resume(url: str, dest: Path, max_attempts: int = RESUME_ATTEMPTS) -> None:
+    """Wrap ``_stream_to_disk`` in a retry loop that resumes from the
+    partial file each time. Stops when an attempt makes no progress."""
+    last_size = -1
+    last_error: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            _stream_to_disk(url, dest, resume=dest.exists())
+            return
+        except (requests.exceptions.RequestException, OSError) as exc:
+            last_error = exc
+            current_size = dest.stat().st_size if dest.exists() else 0
+            if current_size <= last_size:
+                raise RuntimeError(
+                    f"SABS download stalled at {current_size:,} bytes "
+                    f"after attempt {attempt}: {exc}"
+                ) from exc
+            last_size = current_size
+    raise RuntimeError(
+        f"SABS download failed after {max_attempts} resume attempts: {last_error}"
+    )
 
 
 def _convert_zip_to_gpkg(zip_path: Path, out: Path) -> None:
@@ -87,17 +160,19 @@ def fetch(force: bool = False) -> list[tuple[str, str, Path]]:
 
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    # Manual escape hatch: a pre-downloaded archive at LOCAL_ARCHIVE bypasses
-    # the network entirely. Useful when NCES throttles the streamed download.
-    if LOCAL_ARCHIVE.exists():
-        _convert_zip_to_gpkg(LOCAL_ARCHIVE, out)
-        return [("SABS", "converted-local", out)]
+    # ``force`` invalidates the cached archive too — otherwise re-downloading
+    # would be impossible without manually deleting LOCAL_ARCHIVE.
+    if force:
+        LOCAL_ARCHIVE.unlink(missing_ok=True)
 
-    zip_path = out.with_suffix(".tmp.zip")
-    try:
-        _stream_to_disk(SABS_URL, zip_path)
-        _convert_zip_to_gpkg(zip_path, out)
-    finally:
-        zip_path.unlink(missing_ok=True)
+    if _archive_is_valid(LOCAL_ARCHIVE):
+        status = "converted-local"
+    else:
+        # _stream_with_resume picks up where any prior partial download
+        # left off via HTTP Range — important because NCES throttles or
+        # drops connections on the 583 MB stream.
+        _stream_with_resume(SABS_URL, LOCAL_ARCHIVE)
+        status = "downloaded"
 
-    return [("SABS", "downloaded", out)]
+    _convert_zip_to_gpkg(LOCAL_ARCHIVE, out)
+    return [("SABS", status, out)]
