@@ -1,6 +1,6 @@
-"""Pipeline core: pure functions for the spatial join + areal interpolation.
+"""Pipeline core + end-to-end orchestrator.
 
-Exposes building blocks that the orchestrator (Phase 6) wires together:
+Pure functions exposed for unit testing on synthetic geometries:
 
 - ``prepare_layers``  — reproject to TARGET_CRS, repair invalid geometries.
 - ``attach_acs``      — left-join the three ACS tables onto block groups
@@ -13,19 +13,27 @@ Exposes building blocks that the orchestrator (Phase 6) wires together:
                         histogram).
 - ``flag_low_confidence`` — flag schools with missing SABS polygons or
                         very small interpolated household counts.
+- ``join_ccd``        — left-join CCD onto zones by NCESSCH; preserves
+                        CCD-only schools with null geometry.
+- ``serialize_schools`` — produce ``schools_wa.json`` (object keyed by
+                        nces_id) and ``search_index.json`` (slim array)
+                        per docs/schema.md.
 
-Everything here is deliberately pure and operates on small, ordinary
-DataFrames / GeoDataFrames so the math can be exercised with synthetic
-geometries in unit tests.
+``main()`` wires them together end-to-end: load raw inputs from
+``RAW_FILES``, interpolate, assemble per-school records, write the two
+JSON outputs to ``PROCESSED_FILES``.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+import logging
+import sys
+from typing import Any, Iterable, Mapping, Sequence
 
 import geopandas as gpd
 import pandas as pd
 import shapely
 
+from pipeline import io
 from pipeline.brackets import (
     BRACKETS,
     BRACKET_COLUMNS,
@@ -34,6 +42,8 @@ from pipeline.brackets import (
     families_with_children_columns,
 )
 from pipeline.io import TARGET_CRS
+
+log = logging.getLogger(__name__)
 
 LOW_HOUSEHOLD_THRESHOLD = 50
 
@@ -301,15 +311,209 @@ def flag_low_confidence(record: Mapping[str, Any]) -> tuple[bool, list[str]]:
     reasons: list[str] = []
 
     geometry = record.get("geometry")
-    if geometry is None:
+    is_nan = isinstance(geometry, float) and geometry != geometry
+    if geometry is None or is_nan or getattr(geometry, "is_empty", False):
         reasons.append(REASON_MISSING_SABS)
-    else:
-        is_empty = getattr(geometry, "is_empty", False)
-        if is_empty:
-            reasons.append(REASON_MISSING_SABS)
 
     total = record.get("total_families_with_children")
     if total is None or total < LOW_HOUSEHOLD_THRESHOLD:
         reasons.append(REASON_LOW_HOUSEHOLD)
 
     return (bool(reasons), reasons)
+
+
+# ---------------------------------------------------------------------------
+# CCD join
+# ---------------------------------------------------------------------------
+
+
+def join_ccd(
+    zones: pd.DataFrame,
+    ccd: pd.DataFrame,
+    *,
+    sabs_id_col: str = "ncessch",
+) -> pd.DataFrame:
+    """Left-join CCD onto interpolated zones by NCESSCH.
+
+    Every CCD school is kept. Schools that have a CCD entry but no SABS
+    polygon end up with null geometry and NaN bracket counts; downstream
+    ``flag_low_confidence`` picks those up via the ``missing_sabs``
+    reason. Orphan SABS polygons (zone with no matching CCD school) are
+    dropped — without a school name we can't display them.
+    """
+    if "NCESSCH" not in ccd.columns:
+        raise ValueError("CCD missing NCESSCH column")
+
+    zones = zones.copy()
+    if sabs_id_col in zones.columns and sabs_id_col != "NCESSCH":
+        zones = zones.rename(columns={sabs_id_col: "NCESSCH"})
+
+    ccd = ccd.copy()
+    ccd["NCESSCH"] = ccd["NCESSCH"].astype(str).str.strip()
+    if "NCESSCH" in zones.columns:
+        zones["NCESSCH"] = zones["NCESSCH"].astype(str).str.strip()
+        return ccd.merge(zones, on="NCESSCH", how="left", suffixes=("", "_zone"))
+
+    # No zone identifier column at all — return CCD with empty zone fields.
+    return ccd
+
+
+# ---------------------------------------------------------------------------
+# Record assembly + serialization
+# ---------------------------------------------------------------------------
+
+
+def _safe_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value != value:
+        return ""
+    return str(value).strip()
+
+
+def _format_grades(record: Mapping[str, Any]) -> str:
+    """Build the canonical 'GSLO-GSHI' grade string ('K-5', '9-12', etc.)."""
+    gslo = _safe_str(record.get("GSLO")).upper()
+    gshi = _safe_str(record.get("GSHI")).upper()
+    if not gslo and not gshi:
+        return ""
+    if gslo == gshi:
+        return gslo
+    if not gslo:
+        return gshi
+    if not gshi:
+        return gslo
+    return f"{gslo}-{gshi}"
+
+
+def _format_address(record: Mapping[str, Any]) -> str:
+    """'Street, City, State Zip' — drops missing parts cleanly."""
+    street = _safe_str(record.get("LSTREET1"))
+    city = _safe_str(record.get("LCITY"))
+    state = _safe_str(record.get("LSTATE"))
+    zip_ = _safe_str(record.get("LZIP"))
+
+    locality = " ".join(p for p in (state, zip_) if p)
+    locality = ", ".join(p for p in (city, locality) if p)
+    return ", ".join(p for p in (street, locality) if p)
+
+
+def _build_school_record(merged_row: Mapping[str, Any]) -> dict:
+    """Compose one ``schools_wa.json`` entry from a CCD-joined zone row."""
+    nces_id = _safe_str(merged_row.get("NCESSCH"))
+    stats = compute_summary_stats(merged_row)
+    flag, reasons = flag_low_confidence({**merged_row, **stats})
+
+    return {
+        "nces_id": nces_id,
+        "name": _safe_str(merged_row.get("SCH_NAME")),
+        "district": _safe_str(merged_row.get("LEA_NAME")),
+        "city": _safe_str(merged_row.get("LCITY")),
+        "grades": _format_grades(merged_row),
+        "address": _format_address(merged_row),
+        "median_family_income": stats["median_family_income"],
+        "share_under_35k": stats["share_under_35k"],
+        "share_over_150k": stats["share_over_150k"],
+        "total_families_with_children": stats["total_families_with_children"],
+        "bracket_histogram": stats["bracket_histogram"],
+        "low_confidence": flag,
+        "low_confidence_reasons": reasons,
+    }
+
+
+def serialize_schools(
+    merged: Iterable[Mapping[str, Any]],
+) -> tuple[dict[str, dict], list[dict]]:
+    """Format CCD-joined records into the two JSON payloads from
+    docs/schema.md.
+
+    Returns ``(schools_wa, search_index)``:
+    - ``schools_wa`` is keyed by NCES ID; each value matches the full
+      schema.
+    - ``search_index`` is a slim sorted list of
+      ``{nces_id, name, district, city}``.
+    """
+    schools: dict[str, dict] = {}
+    for row in merged:
+        record = _build_school_record(row)
+        nces_id = record["nces_id"]
+        if not nces_id:
+            continue
+        schools[nces_id] = record
+
+    search_index = sorted(
+        (
+            {
+                "nces_id": rec["nces_id"],
+                "name": rec["name"],
+                "district": rec["district"],
+                "city": rec["city"],
+            }
+            for rec in schools.values()
+        ),
+        key=lambda r: r["nces_id"],
+    )
+
+    return schools, search_index
+
+
+# ---------------------------------------------------------------------------
+# End-to-end orchestrator
+# ---------------------------------------------------------------------------
+
+
+def _iter_rows(df: pd.DataFrame) -> Iterable[dict]:
+    """Yield row dicts. Pulled out so main() can iterate without pandas
+    bringing geometry through itertuples / iterrows."""
+    for _, row in df.iterrows():
+        yield row.to_dict()
+
+
+def main() -> int:
+    """Build ``schools_wa.json`` and ``search_index.json`` from the seven
+    raw inputs in ``RAW_FILES``."""
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
+
+    log.info("loading raw inputs")
+    sabs = io.read_geo(io.RAW_FILES["sabs"])
+    bgs = io.read_geo(io.RAW_FILES["block_groups"])
+    blocks = io.read_geo(io.RAW_FILES["blocks"])
+    b19131 = pd.read_parquet(io.RAW_FILES["acs_b19131"])
+    b11005 = pd.read_parquet(io.RAW_FILES["acs_b11005"])
+    b19013 = pd.read_parquet(io.RAW_FILES["acs_b19013"])
+    ccd = pd.read_parquet(io.RAW_FILES["ccd"])
+    log.info(
+        "loaded: %d SABS zones, %d block groups, %d blocks, %d CCD schools",
+        len(sabs), len(bgs), len(blocks), len(ccd),
+    )
+
+    log.info("preparing layers")
+    sabs, bgs, blocks = prepare_layers(sabs, bgs, blocks)
+
+    log.info("attaching ACS to block groups")
+    bgs_with_acs = attach_acs(bgs, b19131, b11005, b19013)
+
+    log.info("interpolating to %d zones (slowest step)", len(sabs))
+    ev_cols = list(families_with_children_columns())
+    zones_with_brackets = interpolate_to_zones(sabs, bgs_with_acs, blocks, ev_cols)
+
+    log.info("joining CCD metadata onto %d zones", len(zones_with_brackets))
+    merged = join_ccd(zones_with_brackets, ccd)
+    log.info("merged: %d schools (CCD with optional zone)", len(merged))
+
+    log.info("serializing")
+    schools, search_index = serialize_schools(_iter_rows(merged))
+    log.info("serialized %d schools", len(schools))
+
+    # The full schools payload is multi-MB; compact format keeps it under
+    # the 5 MB budget. The slim search index stays pretty for diff-readability.
+    io.write_json(schools, io.PROCESSED_FILES["schools"], compact=True)
+    io.write_json(search_index, io.PROCESSED_FILES["search_index"])
+    log.info("wrote %s", io.PROCESSED_FILES["schools"])
+    log.info("wrote %s", io.PROCESSED_FILES["search_index"])
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

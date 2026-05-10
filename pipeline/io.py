@@ -57,17 +57,21 @@ def read_geo(path: Path | str, target_crs: str = TARGET_CRS) -> gpd.GeoDataFrame
     return gdf.to_crs(target_crs)
 
 
-def write_json(obj: Any, path: Path | str) -> None:
+def write_json(obj: Any, path: Path | str, *, compact: bool = False) -> None:
     """Serialize ``obj`` to ``path`` as UTF-8 JSON with sorted keys.
 
-    Sorted keys + indented output keep diffs readable when the processed
-    artifacts are committed to the repo.
+    ``compact=True`` strips whitespace (used for the multi-MB
+    ``schools_wa.json`` so the deployed payload fits the <5 MB target).
+    Default pretty-prints for diff-friendly fixtures and small files.
     """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
-        json.dump(obj, f, ensure_ascii=False, sort_keys=True, indent=2)
-        f.write("\n")
+        if compact:
+            json.dump(obj, f, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        else:
+            json.dump(obj, f, ensure_ascii=False, sort_keys=True, indent=2)
+            f.write("\n")
 
 
 def read_json(path: Path | str) -> Any:
